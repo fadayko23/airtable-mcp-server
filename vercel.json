@@ -1,20 +1,13 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/sse.ts",
-      "use": "@vercel/node"
+  "functions": {
+    "api/sse.ts": {
+      "maxDuration": 30
     },
-    {
-      "src": "api/test.ts",
-      "use": "@vercel/node"
+    "api/test.ts": {
+      "maxDuration": 10
     }
-  ],
-  "routes": [
-    { "src": "/", "dest": "/api/test" },
-    { "src": "/test", "dest": "/api/test" },
-    { "src": "/sse", "dest": "/api/sse" }
-  ]
+  }
 }
 
 
