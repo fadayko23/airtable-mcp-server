@@ -27,7 +27,9 @@ Set these in your Vercel project settings:
 ## Configuration Files
 
 ### vercel.json
-Routes `/sse` requests to the `/api/sse` serverless function with standard Vercel Node.js runtime.
+- Uses `@vercel/node` builder for the SSE API endpoint
+- Routes `/sse` requests to `/api/sse`
+- Builds the TypeScript API function directly
 
 ### api/sse.ts
 Serverless function that:
@@ -36,9 +38,10 @@ Serverless function that:
 - Handles GET requests only (per MCP spec)
 - Includes CORS headers for cross-origin requests
 
-### Dependencies
-- Added `@vercel/node` for proper Vercel TypeScript support
-- Uses compiled classes from `dist/` directory
+### package.json
+- Added `vercel-build` script for Vercel deployment
+- Includes `@vercel/node` dependency for proper TypeScript support
+- Builds TypeScript to `dist/` directory
 
 ## OpenAI Connector Setup
 
@@ -58,3 +61,4 @@ The endpoint should respond to GET requests at `/sse` with Server-Sent Events st
 - **Runtime errors**: Check Vercel function logs for detailed error messages
 - **Connection issues**: Verify the SSE endpoint URL is accessible and returns proper headers
 - **Function runtime errors**: Ensure `@vercel/node` dependency is installed
+- **Output directory errors**: The `vercel.json` now correctly specifies the API function source
