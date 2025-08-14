@@ -62,9 +62,13 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 				capabilities: {
 					resources: {
 						subscribe: false,
+						read: true,
+						list: true,
 					},
 					tools: {
 						subscribe: false,
+						call: true,
+						list: true,
 					},
 				},
 			},
@@ -73,7 +77,9 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 	}
 
 	async connect(transport: Transport): Promise<void> {
+		console.log('MCP server connecting to transport...');
 		await this.server.connect(transport);
+		console.log('MCP server connected to transport successfully');
 	}
 
 	async close(): Promise<void> {
@@ -81,10 +87,12 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 	}
 
 	private initializeHandlers(): void {
+		console.log('Initializing MCP server handlers...');
 		this.server.setRequestHandler(ListResourcesRequestSchema, this.handleListResources.bind(this));
 		this.server.setRequestHandler(ReadResourceRequestSchema, this.handleReadResource.bind(this));
 		this.server.setRequestHandler(ListToolsRequestSchema, this.handleListTools.bind(this));
 		this.server.setRequestHandler(CallToolRequestSchema, this.handleCallTool.bind(this));
+		console.log('MCP server handlers initialized');
 	}
 
 	private async handleListResources(): Promise<ListResourcesResult> {
