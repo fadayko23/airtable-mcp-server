@@ -1,7 +1,7 @@
 import type {VercelRequest, VercelResponse} from '@vercel/node';
 import {SSEServerTransport} from '@modelcontextprotocol/sdk/server/sse.js';
-import {AirtableService} from '../src/airtableService.js';
-import {AirtableMCPServer} from '../src/mcpServer.js';
+import {AirtableService} from '../dist/airtableService.js';
+import {AirtableMCPServer} from '../dist/mcpServer.js';
 
 // Minimal SSE MCP endpoint for OpenAI Connector
 export default async function handler(req: VercelRequest, res: VercelResponse) {

@@ -3,13 +3,13 @@
   "compilerOptions": {
     "outDir": "dist",
     "declaration": true,
-    "rootDir": "."
+    "rootDir": "src"
   },
   "include": [
-    "src/**/*",
-    "api/**/*"
+    "src/**/*"
   ],
   "exclude": [
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "api/**/*"
   ]
 }
