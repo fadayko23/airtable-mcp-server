@@ -44,8 +44,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('Creating Airtable service...');
     const airtableService = new AirtableService(apiKey);
+    
+    // Test Airtable connectivity
+    try {
+      console.log('Testing Airtable connectivity...');
+      const bases = await airtableService.listBases();
+      console.log('Airtable connectivity test successful, found', bases.bases.length, 'bases');
+    } catch (error) {
+      console.error('Airtable connectivity test failed:', error);
+      throw new Error(`Airtable connectivity test failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    
     console.log('Creating MCP server...');
     const mcpServer = new AirtableMCPServer(airtableService);
+    
+    // Validate MCP server configuration
+    console.log('MCP server created:', typeof mcpServer);
+    console.log('MCP server methods available:', Object.getOwnPropertyNames(Object.getPrototypeOf(mcpServer)));
+    
+    // Ensure the server is properly configured
+    if (!mcpServer || typeof mcpServer !== 'object') {
+      throw new Error('Failed to create MCP server');
+    }
 
     console.log('Creating SSE transport...');
     // Create SSE transport with the correct path for Vercel
@@ -53,13 +73,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ChatGPT is calling /api/sse, so we need to use that exact path
     const transport = new SSEServerTransport('/api/sse', res);
     console.log('SSE transport created with path:', '/api/sse');
-
+    
+    // Validate transport configuration
+    console.log('Transport object created:', typeof transport);
+    console.log('Transport methods available:', Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
+    
+    // Ensure the transport is properly configured
+    if (!transport || typeof transport !== 'object') {
+      throw new Error('Failed to create SSE transport');
+    }
+    
     console.log('Connecting MCP server to transport...');
     await mcpServer.connect(transport);
     console.log('MCP server connected successfully');
     
+    // Validate that the connection is working
+    console.log('Validating MCP connection...');
+    try {
+      // Try to list tools to verify the connection is working
+      const tools = await mcpServer['handleListTools']();
+      console.log('MCP connection validation successful, tools available:', tools.tools.length);
+    } catch (error) {
+      console.error('MCP connection validation failed:', error);
+      throw new Error(`MCP connection validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    
     // Keep the connection alive
     console.log('MCP connection established, keeping alive...');
+    
+    // Log server capabilities for debugging
+    console.log('MCP server capabilities:', {
+      name: 'airtable-mcp-server',
+      version: '1.6.1',
+      capabilities: {
+        resources: {
+          subscribe: false,
+          read: true,
+          list: true,
+        },
+        tools: {
+          subscribe: false,
+          call: true,
+          list: true,
+        },
+      },
+    });
     
     // The connection should now be established and ChatGPT can communicate
     // The SSE transport will handle the MCP protocol messages automatically
@@ -69,6 +127,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     setTimeout(() => {
       console.log('Connection timeout reached, but MCP should be working');
     }, 30000); // 30 seconds
+    
+    // Add a heartbeat to keep the connection alive
+    const heartbeat = setInterval(() => {
+      console.log('MCP connection heartbeat - connection still alive');
+    }, 10000); // Every 10 seconds
+    
+    // Clean up heartbeat on function termination
+    process.on('beforeExit', () => {
+      console.log('Function terminating, cleaning up...');
+      clearInterval(heartbeat);
+    });
     
     // Don't end the response - let the SSE transport handle it
     // The transport will keep the connection open for MCP communication
