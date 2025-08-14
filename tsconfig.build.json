@@ -6,10 +6,10 @@
     "rootDir": "."
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    "api/**/*"
   ],
   "exclude": [
-    "**/*.test.ts",
-    "api/**/*"
+    "**/*.test.ts"
   ]
 }
