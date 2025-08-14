@@ -46,7 +46,7 @@ Serverless function that:
 ## OpenAI Connector Setup
 
 1. Go to OpenAI Platform → Connectors → New Connector
-2. Set MCP Server URL to: `https://<your-vercel-domain>.vercel.app/sse`
+2. Set MCP Server URL to: `https://airtable-mcp-server-gamma.vercel.app/`
 3. Choose authentication method (OAuth recommended)
 4. Check "I trust this application"
 5. Click Create
