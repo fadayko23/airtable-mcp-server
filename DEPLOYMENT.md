@@ -27,16 +27,18 @@ Set these in your Vercel project settings:
 ## Configuration Files
 
 ### vercel.json
-Routes `/sse` requests to the `/api/sse` serverless function with:
-- Node.js 20.x runtime
-- 60 second timeout
-- 1GB memory allocation
+Routes `/sse` requests to the `/api/sse` serverless function with standard Vercel Node.js runtime.
 
 ### api/sse.ts
 Serverless function that:
 - Creates an MCP server instance
 - Uses SSE transport for streaming responses
 - Handles GET requests only (per MCP spec)
+- Includes CORS headers for cross-origin requests
+
+### Dependencies
+- Added `@vercel/node` for proper Vercel TypeScript support
+- Uses compiled classes from `dist/` directory
 
 ## OpenAI Connector Setup
 
@@ -55,3 +57,4 @@ The endpoint should respond to GET requests at `/sse` with Server-Sent Events st
 - **Build errors**: Ensure TypeScript compiles locally with `npm run build`
 - **Runtime errors**: Check Vercel function logs for detailed error messages
 - **Connection issues**: Verify the SSE endpoint URL is accessible and returns proper headers
+- **Function runtime errors**: Ensure `@vercel/node` dependency is installed

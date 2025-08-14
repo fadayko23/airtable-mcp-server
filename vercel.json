@@ -1,17 +1,8 @@
 {
   "version": 2,
-  "functions": {
-    "api/sse.ts": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 60,
-      "memory": 1024
-    }
-  },
   "routes": [
     { "src": "/sse", "dest": "/api/sse" }
-  ],
-  "buildCommand": "npm run build",
-  "installCommand": "npm ci"
+  ]
 }
 
 
