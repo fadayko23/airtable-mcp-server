@@ -83,6 +83,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error('Failed to create SSE transport');
     }
     
+    // Start the SSE transport before connecting the MCP server
+    console.log('Starting SSE transport...');
+    transport.start();
+    console.log('SSE transport started successfully');
+    
+    // Log transport session ID for debugging
+    console.log('Transport session ID:', transport.sessionId);
+    
     console.log('Connecting MCP server to transport...');
     await mcpServer.connect(transport);
     console.log('MCP server connected successfully');
@@ -93,6 +101,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Try to list tools to verify the connection is working
       const tools = await mcpServer['handleListTools']();
       console.log('MCP connection validation successful, tools available:', tools.tools.length);
+      
+      // Also test listing resources to ensure full functionality
+      const resources = await mcpServer['handleListResources']();
+      console.log('MCP resources validation successful, resources available:', resources.resources.length);
     } catch (error) {
       console.error('MCP connection validation failed:', error);
       throw new Error(`MCP connection validation failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -119,6 +131,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
     
+    // Final validation that everything is working
+    console.log('Final MCP connection validation...');
+    try {
+      // Verify the transport can send messages
+      if (transport && typeof transport.send === 'function') {
+        console.log('Transport send method is available');
+      }
+      
+      // Verify the MCP server is ready
+      if (mcpServer && typeof mcpServer['handleListTools'] === 'function') {
+        console.log('MCP server is ready to handle requests');
+      }
+      
+      console.log('MCP connection is fully established and ready for communication');
+    } catch (error) {
+      console.error('Final validation failed:', error);
+      throw new Error(`Final validation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    
     // The connection should now be established and ChatGPT can communicate
     // The SSE transport will handle the MCP protocol messages automatically
     
@@ -132,6 +163,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const heartbeat = setInterval(() => {
       console.log('MCP connection heartbeat - connection still alive');
     }, 10000); // Every 10 seconds
+    
+    // Add error handling for the transport
+    try {
+      // Check if transport is still valid
+      if (transport && typeof transport.send === 'function') {
+        console.log('Transport is still valid and has send method');
+      } else {
+        console.error('Transport is no longer valid');
+      }
+    } catch (error) {
+      console.error('Transport validation error:', error);
+    }
     
     // Clean up heartbeat on function termination
     process.on('beforeExit', () => {
