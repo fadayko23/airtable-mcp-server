@@ -61,6 +61,18 @@ Keep the token handy, you'll need it in the next step. It should look something 
 
 5. Save the file and restart Claude Desktop
 
+### Server (Vercel SSE endpoint)
+
+If you want to use this server over HTTP for the OpenAI MCP Connector, you can deploy to Vercel:
+
+1. Ensure the environment variable `AIRTABLE_API_KEY` is set in your Vercel Project Settings.
+2. Deploy. The SSE endpoint will be available at `/sse`.
+3. In the OpenAI connector UI, set the MCP Server URL to `https://<your-vercel-domain>/sse`.
+
+Notes:
+- This server uses an SSE endpoint implemented at `api/sse.ts` with `SSEServerTransport` from the MCP SDK.
+- The endpoint expects a GET request and streams events per the MCP spec.
+
 ### Cursor
 
 #### (Recommended) Via one-click install
