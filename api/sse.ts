@@ -15,9 +15,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
   try {
-    // Import compiled classes after the build step
-    const {AirtableService} = await import('../dist/airtableService.js');
-    const {AirtableMCPServer} = await import('../dist/mcpServer.js');
+    // Import from the built files in dist
+    const {AirtableService} = await import('../dist/src/airtableService.js');
+    const {AirtableMCPServer} = await import('../dist/src/mcpServer.js');
     
     const airtableService = new AirtableService();
     const mcpServer = new AirtableMCPServer(airtableService);
