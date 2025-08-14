@@ -23,10 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const mcpServer = new AirtableMCPServer(airtableService);
 
     // Create SSE transport bound to the request/response
-    const transport = new SSEServerTransport({
-      req: req as unknown as any,
-      res: res as unknown as any,
-    });
+    const transport = new SSEServerTransport(req, res);
 
     await mcpServer.connect(transport);
   } catch (err) {
