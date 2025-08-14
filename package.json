@@ -22,7 +22,8 @@
     "lint": "eslint",
     "clean": "rm -rf dist",
     "build": "tsc --project tsconfig.build.json",
-    "vercel-build": "npm run build",
+    "vercel-build": "npm run build && npm run build:api",
+    "build:api": "tsc --project tsconfig.api.json",
     "build:watch": "nodemon --watch src --ext ts --exec \"npm run build\"",
     "build:dxt": "./build-dxt.sh",
     "prepublishOnly": "npm run clean && npm run build"

@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "api-dist",
+    "declaration": false,
+    "rootDir": ".",
+    "module": "ESNext",
+    "target": "ES2022"
+  },
+  "include": [
+    "src/**/*",
+    "api/**/*"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "dist/**/*",
+    "node_modules/**/*"
+  ]
+}

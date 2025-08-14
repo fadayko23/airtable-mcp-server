@@ -56,12 +56,16 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 		this.server = new Server(
 			{
 				name: 'airtable-mcp-server',
-				version: '0.1.0',
+				version: '1.6.1',
 			},
 			{
 				capabilities: {
-					resources: {},
-					tools: {},
+					resources: {
+						subscribe: false,
+					},
+					tools: {
+						subscribe: false,
+					},
 				},
 			},
 		);

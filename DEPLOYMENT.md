@@ -1,64 +1,95 @@
-# Vercel Deployment Guide
-
-This guide explains how to deploy the Airtable MCP Server to Vercel for use with OpenAI's MCP Connector.
+# ChatGPT Connector Deployment Guide
 
 ## Prerequisites
 
-- Airtable Personal Access Token with permissions:
-  - `schema.bases:read`
-  - `data.records:read` 
-  - `data.records:write` (optional)
-- Airtable Base ID
-- Vercel account
+1. **Airtable API Key**: You need a valid Airtable personal access token with appropriate permissions
+2. **Vercel Account**: For hosting the MCP server
+3. **GitHub Repository**: Connected to Vercel for automatic deployments
 
 ## Environment Variables
 
-Set these in your Vercel project settings:
+Set the following environment variable in your Vercel project:
 
-- `AIRTABLE_API_KEY`: Your Airtable personal access token
-- `AIRTABLE_BASE_ID`: Your Airtable base ID
+```
+AIRTABLE_API_KEY=your_airtable_personal_access_token_here
+```
+
+**Important**: The API key must have at least:
+- `schema.bases:read` - to list bases and tables
+- `data.records:read` - to read records
+- Optional: `data.records:write` - to create/update/delete records
 
 ## Deployment Steps
 
-1. **Push to GitHub**: Ensure your repository is connected to Vercel
-2. **Deploy**: Vercel will automatically build and deploy using the `vercel.json` configuration
-3. **Get URL**: Your SSE endpoint will be available at `https://<your-domain>.vercel.app/sse`
+1. **Push your code to GitHub**
+2. **Connect your repository to Vercel**
+3. **Set the environment variable** in Vercel dashboard
+4. **Deploy** - Vercel will automatically build and deploy
 
-## Configuration Files
+## Testing the Connection
 
-### vercel.json
-- Uses `@vercel/node` builder for the SSE API endpoint
-- Routes `/sse` requests to `/api/sse`
-- Builds the TypeScript API function directly
+### 1. Test the basic endpoint
+Visit: `https://your-vercel-app.vercel.app/api/test`
 
-### api/sse.ts
-Serverless function that:
-- Creates an MCP server instance
-- Uses SSE transport for streaming responses
-- Handles GET requests only (per MCP spec)
-- Includes CORS headers for cross-origin requests
+You should see:
+```json
+{
+  "status": "ok",
+  "message": "Airtable MCP Server is running",
+  "hasApiKey": true,
+  "timestamp": "...",
+  "environment": "production"
+}
+```
 
-### package.json
-- Added `vercel-build` script for Vercel deployment
-- Includes `@vercel/node` dependency for proper TypeScript support
-- Builds TypeScript to `dist/` directory
+### 2. Test the SSE endpoint
+Visit: `https://your-vercel-app.vercel.app/api/sse`
 
-## OpenAI Connector Setup
+You should see the MCP server establish a connection.
 
-1. Go to OpenAI Platform → Connectors → New Connector
-2. Set MCP Server URL to: `https://airtable-mcp-server-gamma.vercel.app/`
-3. Choose authentication method (OAuth recommended)
-4. Check "I trust this application"
-5. Click Create
+## ChatGPT Connector Setup
 
-## Testing
-
-The endpoint should respond to GET requests at `/sse` with Server-Sent Events stream containing MCP protocol messages.
+1. **URL**: Use `https://your-vercel-app.vercel.app/api/sse`
+2. **Authentication**: Set to "No authentication" (the MCP server handles this internally)
+3. **Trust Application**: Check this box
 
 ## Troubleshooting
 
-- **Build errors**: Ensure TypeScript compiles locally with `npm run build`
-- **Runtime errors**: Check Vercel function logs for detailed error messages
-- **Connection issues**: Verify the SSE endpoint URL is accessible and returns proper headers
-- **Function runtime errors**: Ensure `@vercel/node` dependency is installed
-- **Output directory errors**: The `vercel.json` now correctly specifies the API function source
+### "Error creating connector"
+
+**Common causes:**
+1. **Missing API Key**: Check that `AIRTABLE_API_KEY` is set in Vercel
+2. **Build Issues**: Ensure the TypeScript compilation succeeds
+3. **Import Errors**: Check Vercel logs for import failures
+4. **MCP Protocol**: Verify the server implements the protocol correctly
+
+**Debug steps:**
+1. Check Vercel function logs for errors
+2. Verify the test endpoint works
+3. Ensure all dependencies are properly installed
+4. Check that the dist/ folder contains compiled JavaScript files
+
+### Connection Issues
+
+**If the SSE endpoint fails:**
+1. Check Vercel function timeout settings
+2. Verify CORS headers are set correctly
+3. Ensure the MCP server can connect to Airtable API
+4. Check for any TypeScript compilation errors
+
+## MCP Protocol Requirements
+
+The server must:
+1. Respond to `initialize` requests
+2. Provide proper capabilities in the response
+3. Handle `tools/list` requests
+4. Handle `resources/list` requests
+5. Implement all declared tools and resources
+
+## Support
+
+If you continue to have issues:
+1. Check the Vercel function logs
+2. Verify your Airtable API key permissions
+3. Test with a simple MCP client first
+4. Check the MCP specification for protocol compliance
