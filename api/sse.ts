@@ -24,6 +24,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Some clients or validators may send a HEAD request to verify the endpoint.
+  // Respond with 200 OK to indicate the SSE endpoint exists.
+  if (req.method === 'HEAD') {
+    res.status(200).end();
+    return;
+  }
+
   const sessionId = Array.isArray(req.query.sessionId)
     ? req.query.sessionId[0]
     : req.query.sessionId;
