@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Set SSE-specific headers for the streaming response (GET only)
-  res.setHeader('Content-Type', 'text/event-stream');
+  // Let the transport manage SSE details, but disabling buffering is safe
   res.setHeader('X-Accel-Buffering', 'no');
 
   try {
@@ -83,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const mcpServer = new AirtableMCPServer(airtableService);
 
     // Create the SSE transport for this connection
-    const transport = new SSEServerTransport('/api/sse', res);
+    const transport = new SSEServerTransport('/api/sse');
     console.log('SSE transport created with path:', '/api/sse');
 
     console.log('Transport object created:', typeof transport);
@@ -204,6 +204,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('SSE transport is properly configured for MCP communication');
 
     console.log('MCP connection established and ready for indefinite communication');
+
+    // Hand off the GET request to the transport to run the SSE stream
+    console.log('Starting SSE stream via transport.handleMessage...');
+    await transport.handleMessage(req, res);
+    console.log('SSE stream handler returned (connection likely closed by client).');
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('SSE handler error:', err);
