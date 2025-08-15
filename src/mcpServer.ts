@@ -166,29 +166,18 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 	}
 
 	private async handleListTools(): Promise<ListToolsResult> {
-		console.log('MCP handleListTools called - returning minimal tool set (search, fetch)');
+		console.log('MCP handleListTools called - returning expanded tool set');
 		const result = {
 			tools: [
-				{
-					name: 'search',
-					description: 'Search for content and return a list of results with id, title, text, url',
-					inputSchema: {
-						type: 'object' as const,
-						properties: { query: { type: 'string' as const } },
-						required: ['query'] as string[],
-						additionalProperties: false,
-					},
-				},
-				{
-					name: 'fetch',
-					description: 'Fetch a single result by id and return id, title, text, url, metadata',
-					inputSchema: {
-						type: 'object' as const,
-						properties: { id: { type: 'string' as const } },
-						required: ['id'] as string[],
-						additionalProperties: false,
-					},
-				},
+				{ name: 'list_bases', description: 'List Airtable bases accessible with the API key', inputSchema: { type: 'object' as const, properties: {}, required: [] as string[], additionalProperties: false } },
+				{ name: 'list_tables', description: 'List tables for a base', inputSchema: { type: 'object' as const, properties: { baseId: { type: 'string' as const } }, required: ['baseId'] as string[], additionalProperties: false } },
+				{ name: 'describe_table', description: 'Describe a specific table (fields, views, primary field)', inputSchema: { type: 'object' as const, properties: { baseId: { type: 'string' as const }, tableId: { type: 'string' as const } }, required: ['baseId', 'tableId'] as string[], additionalProperties: false } },
+				{ name: 'list_records', description: 'List records from a table (optionally limit and/or use a view)', inputSchema: { type: 'object' as const, properties: { baseId: { type: 'string' as const }, tableId: { type: 'string' as const }, maxRecords: { type: 'number' as const }, view: { type: 'string' as const }, filterByFormula: { type: 'string' as const } }, required: ['baseId', 'tableId'] as string[], additionalProperties: false } },
+				{ name: 'create_record', description: 'Create a record in a table', inputSchema: { type: 'object' as const, properties: { baseId: { type: 'string' as const }, tableId: { type: 'string' as const }, fields: { type: 'object' as const, additionalProperties: true } }, required: ['baseId', 'tableId', 'fields'] as string[], additionalProperties: false } },
+				{ name: 'update_records', description: 'Update one or more records in a table', inputSchema: { type: 'object' as const, properties: { baseId: { type: 'string' as const }, tableId: { type: 'string' as const }, records: { type: 'array' as const, items: { type: 'object' as const, properties: { id: { type: 'string' as const }, fields: { type: 'object' as const, additionalProperties: true } }, required: ['id', 'fields'] as string[], additionalProperties: false } } }, required: ['baseId', 'tableId', 'records'] as string[], additionalProperties: false } },
+				{ name: 'delete_records', description: 'Delete one or more records from a table', inputSchema: { type: 'object' as const, properties: { baseId: { type: 'string' as const }, tableId: { type: 'string' as const }, recordIds: { type: 'array' as const, items: { type: 'string' as const } } }, required: ['baseId', 'tableId', 'recordIds'] as string[], additionalProperties: false } },
+				{ name: 'search', description: 'Search for content and return a list of results with id, title, text, url', inputSchema: { type: 'object' as const, properties: { query: { type: 'string' as const } }, required: ['query'] as string[], additionalProperties: false } },
+				{ name: 'fetch', description: 'Fetch a single result by id and return id, title, text, url, metadata', inputSchema: { type: 'object' as const, properties: { id: { type: 'string' as const } }, required: ['id'] as string[], additionalProperties: false } },
 			],
 		};
 		console.log(`MCP handleListTools returning ${result.tools.length} tools`);
@@ -198,6 +187,54 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 	private async handleCallTool(request: z.infer<typeof CallToolRequestSchema>): Promise<CallToolResult> {
 		try {
 			switch (request.params.name) {
+				case 'list_bases': {
+					const bases = await this.airtableService.listBases();
+					return formatToolResponse(bases);
+				}
+
+				case 'list_tables': {
+					const Args = z.object({ baseId: z.string() });
+					const { baseId } = Args.parse(request.params.arguments);
+					const schema = await this.airtableService.getBaseSchema(baseId);
+					return formatToolResponse(schema);
+				}
+
+				case 'describe_table': {
+					const Args = z.object({ baseId: z.string(), tableId: z.string() });
+					const { baseId, tableId } = Args.parse(request.params.arguments);
+					const schema = await this.airtableService.getBaseSchema(baseId);
+					const table = schema.tables.find((t) => t.id === tableId);
+					if (!table) return formatToolResponse(`Table ${tableId} not found in base ${baseId}`, true);
+					return formatToolResponse(table);
+				}
+
+				case 'list_records': {
+					const Args = z.object({ baseId: z.string(), tableId: z.string(), maxRecords: z.number().optional(), view: z.string().optional(), filterByFormula: z.string().optional() });
+					const { baseId, tableId, maxRecords, view, filterByFormula } = Args.parse(request.params.arguments);
+					const records = await this.airtableService.listRecords(baseId, tableId, { maxRecords, view, filterByFormula });
+					return formatToolResponse(records);
+				}
+
+				case 'create_record': {
+					const Args = z.object({ baseId: z.string(), tableId: z.string(), fields: z.record(z.any()) });
+					const { baseId, tableId, fields } = Args.parse(request.params.arguments);
+					const record = await this.airtableService.createRecord(baseId, tableId, fields);
+					return formatToolResponse(record);
+				}
+
+				case 'update_records': {
+					const Args = z.object({ baseId: z.string(), tableId: z.string(), records: z.array(z.object({ id: z.string(), fields: z.record(z.any()) })) });
+					const { baseId, tableId, records } = Args.parse(request.params.arguments);
+					const updated = await this.airtableService.updateRecords(baseId, tableId, records);
+					return formatToolResponse(updated);
+				}
+
+				case 'delete_records': {
+					const Args = z.object({ baseId: z.string(), tableId: z.string(), recordIds: z.array(z.string()) });
+					const { baseId, tableId, recordIds } = Args.parse(request.params.arguments);
+					const deleted = await this.airtableService.deleteRecords(baseId, tableId, recordIds);
+					return formatToolResponse(deleted);
+				}
 				case 'search': {
 					const Args = z.object({ query: z.string() });
 					const { query } = Args.parse(request.params.arguments);

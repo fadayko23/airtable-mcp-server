@@ -205,13 +205,28 @@ export class AirtableService implements IAirtableService {
 		// Escape the search term to prevent formula injection
 		const escapedTerm = searchTerm.replace(/["\\]/g, '\\$&');
 
-		// Build OR(FIND("term", "" & {FieldName}), ...)
-		// Using "" & {FieldName} coerces arrays/lookups into strings so FIND works
-		const filterByFormula = `OR(${
-			searchFields
-				.map((fieldName) => `FIND("${escapedTerm}", "" & {${fieldName}})`)
-				.join(',')
-		})`;
+		// Build OR(SEARCH("term", "" & {FieldName}), ...)
+		// Using "" & {FieldName} coerces arrays/lookups into strings; SEARCH is case-insensitive
+		// Tokenize query to allow broad matching on meaningful words
+		const stopwords = new Set(['the','a','an','of','and','or','for','with','to','in','on','at','by','last','name','project','client','find']);
+		const tokens = Array.from(new Set((searchTerm.toLowerCase().match(/[a-z0-9]+/g) || [])
+			.filter((w) => w.length >= 3 && !stopwords.has(w)))).slice(0, 5);
+
+		let filterByFormula: string;
+		if (tokens.length > 0) {
+			const parts: string[] = [];
+			for (const fieldName of searchFields) {
+				for (const tok of tokens) {
+					const esc = tok.replace(/["\\]/g, '\\$&');
+					parts.push(`SEARCH("${esc}", "" & {${fieldName}})`);
+				}
+			}
+			filterByFormula = `OR(${parts.join(',')})`;
+		} else {
+			filterByFormula = `OR(${searchFields
+				.map((fieldName) => `SEARCH("${escapedTerm}", "" & {${fieldName}})`)
+				.join(',')})`;
+		}
 
 		return this.listRecords(baseId, tableId, {maxRecords, filterByFormula, view});
 	}
@@ -236,6 +251,12 @@ export class AirtableService implements IAirtableService {
 			'phoneNumber',
 			'lookup',
 			'rollup',
+			'formula',
+			'singleSelect',
+			'multipleSelects',
+			'multipleRecordLinks',
+			'singleCollaborator',
+			'multipleCollaborators',
 		];
 
 		// Return FIELD NAMES (not IDs) so we can reference them directly in formulas
