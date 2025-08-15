@@ -128,9 +128,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
 
+    console.log('Starting SSE transport...');
+    try {
+      await transport.start();
+      console.log('SSE transport started - ready for MCP connection');
+    } catch (error) {
+      console.error('Failed to start SSE transport:', error);
+      res.status(500).send('Failed to start SSE transport');
+      return;
+    }
+    
     console.log('Connecting MCP server to transport...');
-    await mcpServer.connect(transport);
-    console.log('MCP server connected successfully');
+    try {
+      await mcpServer.connect(transport);
+      console.log('MCP server connected to transport successfully');
+    } catch (error) {
+      console.error('Failed to connect MCP server to transport:', error);
+      res.status(500).send('Failed to connect MCP server');
+      return;
+    }
 
     // Diagnostics
     console.log('SSE transport started by MCP server connection');
@@ -218,6 +234,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('SSE transport is properly configured for MCP communication');
 
     console.log('MCP connection established and ready for indefinite communication');
+    
+    // Send an initial SSE comment to validate the stream is working
+    res.write(': MCP SSE stream initialized\n\n');
 
     // Keep the request open until the client disconnects. The transport has
     // already been started by the server connection above, so we simply wait

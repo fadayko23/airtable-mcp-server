@@ -35,7 +35,14 @@ const getInputSchema = (schema: z.ZodType<object>): ListToolsResult['tools'][0][
 		throw new Error(`Invalid input schema to convert in airtable-mcp-server: expected an object but got ${'type' in jsonSchema ? String(jsonSchema.type) : 'no type'}`);
 	}
 
-	return {...jsonSchema, type: 'object'};
+	// Ensure strict JSON Schema compliance for OpenAI validator
+	const result = {...jsonSchema, type: 'object' as const};
+	
+	// Remove any unsupported properties that might cause validation issues
+	delete (result as any).$schema;
+	delete (result as any).additionalProperties;
+	
+	return result;
 };
 
 const formatToolResponse = (data: unknown, isError = false): CallToolResult => {
@@ -147,7 +154,8 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 	}
 
 	private async handleListTools(): Promise<ListToolsResult> {
-		return {
+		console.log('MCP handleListTools called - returning tool definitions');
+		const result = {
 			tools: [
 				{
 					name: 'list_records',
@@ -163,9 +171,10 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 					name: 'list_bases',
 					description: 'List all accessible Airtable bases',
 					inputSchema: {
-						type: 'object',
+						type: 'object' as const,
 						properties: {},
 						required: [],
+						additionalProperties: false,
 					},
 				},
 				{
@@ -220,6 +229,8 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 				},
 			],
 		};
+		console.log(`MCP handleListTools returning ${result.tools.length} tools`);
+		return result;
 	}
 
 	private async handleCallTool(request: z.infer<typeof CallToolRequestSchema>): Promise<CallToolResult> {
