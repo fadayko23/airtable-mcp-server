@@ -199,16 +199,17 @@ export class AirtableService implements IAirtableService {
 		maxRecords?: number,
 		view?: string,
 	): Promise<AirtableRecord[]> {
-		// Validate and get search fields
+		// Validate and get search fields (FIELD NAMES for formula references)
 		const searchFields = await this.validateAndGetSearchFields(baseId, tableId, fieldIds);
 
 		// Escape the search term to prevent formula injection
 		const escapedTerm = searchTerm.replace(/["\\]/g, '\\$&');
 
-		// Build OR(FIND("term", field1), FIND("term", field2), ...)
+		// Build OR(FIND("term", "" & {FieldName}), ...)
+		// Using "" & {FieldName} coerces arrays/lookups into strings so FIND works
 		const filterByFormula = `OR(${
 			searchFields
-				.map((fieldId) => `FIND("${escapedTerm}", {${fieldId}})`)
+				.map((fieldName) => `FIND("${escapedTerm}", "" & {${fieldName}})`)
 				.join(',')
 		})`;
 
@@ -233,20 +234,23 @@ export class AirtableService implements IAirtableService {
 			'email',
 			'url',
 			'phoneNumber',
+			'lookup',
+			'rollup',
 		];
 
+		// Return FIELD NAMES (not IDs) so we can reference them directly in formulas
 		const searchableFields = table.fields
-			.filter((field) => searchableFieldTypes.includes(field.type))
-			.map((field) => field.id);
+			.filter((field) => searchableFieldTypes.includes((field as any).type))
+			.map((field) => field.name);
 
 		if (searchableFields.length === 0) {
 			throw new Error('No text fields available to search');
 		}
 
-		// If specific fields were requested, validate they exist and are text fields
+		// If specific fields were requested, validate they exist and are text-like fields
 		if (requestedFieldIds && requestedFieldIds.length > 0) {
-			// Check if any requested fields were invalid
-			const invalidFields = requestedFieldIds.filter((fieldId) => !searchableFields.includes(fieldId));
+			// Treat requestedFieldIds as FIELD NAMES
+			const invalidFields = requestedFieldIds.filter((fieldName) => !searchableFields.includes(fieldName));
 			if (invalidFields.length > 0) {
 				throw new Error(`Invalid fields requested: ${invalidFields.join(', ')}`);
 			}

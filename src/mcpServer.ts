@@ -203,17 +203,77 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 					const { query } = Args.parse(request.params.arguments);
 					const { bases } = await this.airtableService.listBases();
 					if (!bases.length) return formatToolResponse([]);
-					const baseId = bases[0].id;
-					const baseSchema = await this.airtableService.getBaseSchema(baseId);
-					const table = baseSchema.tables[0];
-					if (!table) return formatToolResponse([]);
-					const records = await this.airtableService.searchRecords(baseId, table.id, query, undefined, 10);
-					const results = records.map((r) => ({
-						id: `${baseId}:${table.id}:${r.id}`,
-						title: `${table.name} record ${r.id}`,
-						text: JSON.stringify(r.fields).slice(0, 200),
-						url: '',
-					}));
+					// Optional allowlist of bases via env var (comma-separated)
+					const allowBaseIds = (process.env.MCP_SEARCH_BASE_IDS ?? '')
+						.split(',')
+						.map((s) => s.trim())
+						.filter(Boolean);
+
+					const maxTotalResults = Number.parseInt(process.env.MCP_SEARCH_MAX_TOTAL ?? '100', 10);
+					const perTableLimit = Number.parseInt(process.env.MCP_SEARCH_PER_TABLE_LIMIT ?? '10', 10);
+					const results: Array<{id: string; title: string; text: string; url: string}> = [];
+
+					for (const base of bases) {
+						if (allowBaseIds.length > 0 && !allowBaseIds.includes(base.id)) continue;
+						// eslint-disable-next-line no-await-in-loop
+						const baseSchema = await this.airtableService.getBaseSchema(base.id);
+						for (const table of baseSchema.tables) {
+							if (results.length >= maxTotalResults) break;
+							try {
+								// eslint-disable-next-line no-await-in-loop
+								const records = await this.airtableService.searchRecords(base.id, table.id, query, undefined, perTableLimit);
+								const primaryField = table.fields.find((f) => f.id === table.primaryFieldId);
+								const primaryFieldName = primaryField?.name;
+								for (const r of records) {
+									if (results.length >= maxTotalResults) break;
+									const stringify = (val: unknown): string => {
+										if (val == null) return '';
+										if (typeof val === 'string' || typeof val === 'number' || typeof val === 'boolean') return String(val);
+										if (Array.isArray(val)) return val.map((v) => stringify(v)).filter(Boolean).join(', ');
+										if (typeof val === 'object') {
+											// common Airtable object shapes (attachments, linked records)
+											try { return JSON.stringify(val); } catch { return ''; }
+										}
+										return '';
+									};
+
+									// Build a prioritized snippet using primary field and known text-like fields
+									const prioritizedFieldNames = [
+										primaryFieldName,
+										'Project Name', 'Project Complete Address', 'Project Additional Notes',
+										'Company Name', 'Property Name', 'Client', 'Client Name', 'Owner', 'Status',
+									].filter(Boolean) as string[];
+									const seen = new Set<string>();
+									const orderedFieldNames: string[] = [];
+									for (const name of prioritizedFieldNames) { if (!seen.has(name) && r.fields[name] !== undefined) { seen.add(name); orderedFieldNames.push(name); } }
+									// fill with any other string-like fields
+									for (const [name, val] of Object.entries(r.fields)) {
+										if (seen.has(name)) continue;
+										const s = stringify(val);
+										if (s) { seen.add(name); orderedFieldNames.push(name); }
+										if (orderedFieldNames.length >= 8) break;
+									}
+									const parts = orderedFieldNames.map((name) => `${name}: ${stringify(r.fields[name])}`);
+									const snippet = (parts.join(' | ') || JSON.stringify(r.fields)).slice(0, 400);
+
+									const primaryValue = primaryFieldName ? stringify(r.fields[primaryFieldName]) : '';
+									const titleSuffix = primaryValue ? primaryValue : r.id;
+									const url = `https://airtable.com/${base.id}/${table.id}/${r.id}`;
+
+									results.push({
+										id: `${base.id}:${table.id}:${r.id}`,
+										title: `${base.name} – ${table.name} – ${titleSuffix}`,
+										text: snippet,
+										url,
+									});
+								}
+							} catch {
+								// ignore table errors
+							}
+						}
+						if (results.length >= maxTotalResults) break;
+					}
+
 					return formatToolResponse(results);
 				}
 
@@ -223,12 +283,21 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 					const parts = id.split(':');
 					if (parts.length !== 3) return formatToolResponse('Invalid id format. Expected baseId:tableId:recordId', true);
 					const [baseId, tableId, recordId] = parts;
-					const record = await this.airtableService.getRecord(baseId, tableId, recordId);
+					const [record, baseSchema] = await Promise.all([
+						this.airtableService.getRecord(baseId, tableId, recordId),
+						this.airtableService.getBaseSchema(baseId),
+					]);
+					const table = baseSchema.tables.find((t) => t.id === tableId);
+					const primaryFieldName = table?.fields.find((f) => f.id === table?.primaryFieldId)?.name;
+					const title = primaryFieldName && record.fields[primaryFieldName]
+						? String(record.fields[primaryFieldName])
+						: `${table?.name ?? tableId} ${record.id}`;
+					const url = `https://airtable.com/${baseId}/${tableId}/${record.id}`;
 					const payload = {
 						id: record.id,
-						title: `${tableId} ${record.id}`,
+						title,
 						text: JSON.stringify(record.fields),
-						url: '',
+						url,
 						metadata: { baseId, tableId },
 					};
 					return formatToolResponse(payload);
