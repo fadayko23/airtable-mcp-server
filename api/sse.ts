@@ -29,8 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // POST: route a message to an existing session (must include sessionId)
   if (req.method === 'POST') {
     if (!sessionId) {
-      console.warn('POST without sessionId — rejecting per spec');
-      res.status(400).send('Missing sessionId');
+      res.status(404).send('Session not found');
       return;
     }
     console.log('Session ID received:', sessionId);
@@ -205,10 +204,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('MCP connection established and ready for indefinite communication');
 
-    // Hand off the GET request to the transport to run the SSE stream
-    console.log('Starting SSE stream via transport.handleMessage...');
-    await transport.handleMessage(req);
-    console.log('SSE stream handler returned (connection likely closed by client).');
+    // Keep the request open until the client disconnects. The transport has
+    // already been started by the server connection above, so we simply wait
+    // indefinitely here.
+    await new Promise<void>(() => {});
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('SSE handler error:', err);
