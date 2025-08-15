@@ -1,26 +1,18 @@
-import type {VercelRequest, VercelResponse} from '@vercel/node';
-import {SSEServerTransport} from '@modelcontextprotocol/sdk/server/sse.js';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+
+// Store active transports by session ID so POST requests can be routed correctly
+const transports = new Map<string, SSEServerTransport>();
 
 // Minimal SSE MCP endpoint for OpenAI Connector
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('SSE endpoint called:', req.method, req.url);
   console.log('Request headers:', req.headers);
   console.log('Query parameters:', req.query);
-  
-  // Allow both GET and POST for MCP connections
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    res.status(405).setHeader('Allow', 'GET, POST').send('Method Not Allowed');
-    return;
-  }
 
-  // Log the session ID if present
-  if (req.query.sessionId) {
-    console.log('Session ID received:', req.query.sessionId);
-  }
-
-  // Set CORS headers for cross-origin requests
+  // CORS and caching headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -29,55 +21,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
 
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return;
+  }
+
+  const sessionId = Array.isArray(req.query.sessionId)
+    ? req.query.sessionId[0]
+    : req.query.sessionId;
+
+  // Handle POST messages for existing sessions
+  if (req.method === 'POST' && sessionId) {
+    console.log('Session ID received:', sessionId);
+    const transport = transports.get(sessionId);
+    if (!transport) {
+      res.status(404).send('Session not found');
+      return;
+    }
+    try {
+      await transport.handlePostMessage(req, res);
+    } catch (err) {
+      console.error('Error handling POST message:', err);
+      if (!res.headersSent) res.status(500).send('Error handling request');
+    }
+    return;
+  }
+
+  // Only allow GET or initial POST without session ID to establish connection
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    res.status(405).setHeader('Allow', 'GET, POST, OPTIONS').send('Method Not Allowed');
+    return;
+  }
+
   try {
     console.log('Checking for API key...');
-    // Check if API key is available
     const apiKey = process.env.AIRTABLE_API_KEY;
     if (!apiKey) {
       console.error('AIRTABLE_API_KEY environment variable is not set');
       res.status(500).send('Server configuration error: Missing Airtable API key');
       return;
     }
-    console.log('API key found, length:', apiKey.length);
 
     console.log('Importing MCP classes...');
-    // Import the compiled classes
-    const {AirtableService} = await import('../dist/airtableService.js');
-    const {AirtableMCPServer} = await import('../dist/mcpServer.js');
+    const { AirtableService } = await import('../dist/airtableService.js');
+    const { AirtableMCPServer } = await import('../dist/mcpServer.js');
     console.log('MCP classes imported successfully');
 
     console.log('Creating Airtable service...');
     const airtableService = new AirtableService(apiKey);
-    
-    // Test Airtable connectivity
-    try {
-      console.log('Testing Airtable connectivity...');
-      const bases = await airtableService.listBases();
-      console.log('Airtable connectivity test successful, found', bases.bases.length, 'bases');
-    } catch (error) {
-      console.error('Airtable connectivity test failed:', error);
-      throw new Error(`Airtable connectivity test failed: ${error instanceof Error ? error.message : String(error)}`);
-    }
-    
+
+    console.log('Testing Airtable connectivity...');
+    await airtableService.listBases();
+    console.log('Airtable connectivity test successful');
+
     console.log('Creating MCP server...');
     const mcpServer = new AirtableMCPServer(airtableService);
-    
-    // Validate MCP server configuration
-    console.log('MCP server created:', typeof mcpServer);
-    console.log('MCP server methods available:', Object.getOwnPropertyNames(Object.getPrototypeOf(mcpServer)));
-    
-    // Ensure the server is properly configured
-    if (!mcpServer || typeof mcpServer !== 'object') {
-      throw new Error('Failed to create MCP server');
-    }
 
-    console.log('Creating SSE transport...');
-    // Create SSE transport with the correct path for Vercel
-    // The path should match the endpoint URL that ChatGPT is calling
-    // ChatGPT is calling /api/sse, so we need to use that exact path
+    // Create the SSE transport for this connection
     const transport = new SSEServerTransport('/api/sse', res);
     console.log('SSE transport created with path:', '/api/sse');
-    
+
     // Validate transport configuration
     console.log('Transport object created:', typeof transport);
     console.log('Transport methods available:', Object.getOwnPropertyNames(Object.getPrototypeOf(transport)));
@@ -106,6 +109,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       transportConstructor: transport.constructor.name,
       transportPath: '/api/sse',
       endpointUrl: 'https://airtable-mcp-server-gamma.vercel.app/api/sse'
+    });
+    
+    // Register the transport by its sessionId for later POST message handling
+    if (transport && transport.sessionId) {
+      transports.set(transport.sessionId, transport);
+      console.log('SSE transport created and registered for session:', transport.sessionId);
+    } else {
+      console.error('Failed to create SSE transport or missing sessionId');
+      res.status(500).send('Failed to initialize SSE transport');
+      return;
+    }
+    
+    // Clean up transport when connection closes
+    res.on('close', () => {
+      if (transport.sessionId) {
+        transports.delete(transport.sessionId);
+        console.log('Transport cleaned up for session:', transport.sessionId);
+      }
     });
     
     console.log('Connecting MCP server to transport...');
@@ -295,15 +316,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('SSE handler error:', err);
-    console.error('Error stack:', err instanceof Error ? err.stack : 'No stack trace');
-    
-    // Only send error response if we haven't already started the SSE stream
     if (!res.headersSent) {
       res.status(500).send(`Server error: ${message}`);
-    } else {
-      console.error('Cannot send error response - headers already sent');
     }
   }
 }
-
-
