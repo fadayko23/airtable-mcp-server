@@ -14,7 +14,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  res.setHeader('Cache-Control', 'no-cache');
+  // Per OpenAI connector/MCP SSE expectations, disable caching completely
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Connection', 'keep-alive');
 
   if (req.method === 'OPTIONS') {
@@ -61,6 +62,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Set SSE-specific headers for the streaming response (GET only)
   // Let the transport manage SSE details, but disabling buffering is safe
   res.setHeader('X-Accel-Buffering', 'no');
+  // Some validators require this header to be present on the initial response
+  res.setHeader('Content-Type', 'text/event-stream');
 
   try {
     console.log('Checking for API key...');

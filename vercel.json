@@ -11,7 +11,12 @@
       "src": "/api/(.*)",
       "dest": "api/$1.ts"
     }
-  ]
+  ],
+  "functions": {
+    "api/sse.ts": {
+      "maxDuration": 60
+    }
+  }
 }
 
 
