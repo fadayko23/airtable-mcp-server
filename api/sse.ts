@@ -26,10 +26,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? req.query.sessionId[0]
     : req.query.sessionId;
 
-  // POST: route a message to an existing session (must include sessionId)
+  // POST: route a message to an existing session. Some clients (e.g. probes)
+  // may POST before establishing a GET SSE session. In that case, reply 200
+  // so the connector creation flow doesn't fail, and wait for the GET to
+  // create the transport.
   if (req.method === 'POST') {
     if (!sessionId) {
-      res.status(404).send('Session not found');
+      console.log('POST received without sessionId – responding OK for pre-session probe');
+      res.status(200).json({status: 'ok', message: 'SSE endpoint ready'});
       return;
     }
     console.log('Session ID received:', sessionId);
