@@ -42,11 +42,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // The client should first establish a session via GET to obtain a sessionId.
   if (req.method === 'POST') {
     if (!sessionId) {
-      console.log('POST received without sessionId – responding 400 Bad Request per MCP spec');
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Missing sessionId. Please establish an SSE session first via GET request.'
-      });
+      console.log('POST received without sessionId – responding 204 (pre-session hint)');
+      res.setHeader('MCP-PreSession', 'true');
+      res.status(204).end();
       return;
     }
     console.log('Session ID received:', sessionId);
