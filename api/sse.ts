@@ -29,8 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // POST: route a message to an existing session (must include sessionId)
   if (req.method === 'POST') {
     if (!sessionId) {
-      console.warn('POST without sessionId — rejecting per spec');
-      res.status(400).send('Missing sessionId');
+      res.status(404).send('Session not found');
       return;
     }
     console.log('Session ID received:', sessionId);
