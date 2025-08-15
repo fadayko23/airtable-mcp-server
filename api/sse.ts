@@ -285,21 +285,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (async () => {
         while (!closed) {
           try {
-            // Block up to 25s waiting for a message, then loop to keep the function alive
-            const result: any = await (redis as any).blpop(queueKey, { timeout: 25 });
-            // @vercel/kv returns either null (timeout) or [key, value] | { key, element }
-            if (result) {
-              const value = Array.isArray(result) ? result[1] : (result.element ?? result[queueKey]);
-              if (value) {
-                const msg = JSON.parse(value);
-                try {
-                  // Deliver as if it came via POST
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                  await (transport as any).handleMessage(msg);
-                } catch (deliverErr) {
-                  console.error('Error delivering relayed message to transport:', deliverErr);
-                }
+            // REST KV does not support blocking pops. Poll with LPOP and a short sleep.
+            const value: string | null = await (redis as any).lpop(queueKey);
+            if (value) {
+              const msg = JSON.parse(value);
+              try {
+                // Deliver as if it came via POST
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                await (transport as any).handleMessage(msg);
+              } catch (deliverErr) {
+                console.error('Error delivering relayed message to transport:', deliverErr);
               }
+              // Refresh TTL while active
+              await (redis as any).expire(queueKey, 600);
+            } else {
+              // No message; brief sleep to avoid tight loop
+              await new Promise((r) => setTimeout(r, 800));
             }
           } catch (loopErr) {
             console.error('KV relay pump error:', loopErr);
