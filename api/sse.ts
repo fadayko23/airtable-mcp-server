@@ -37,22 +37,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? req.query.sessionId[0]
     : req.query.sessionId;
 
-  // POST: route a message to an existing session. According to MCP specification,
-  // requests without a valid sessionId should return 400 Bad Request (not 404).
-  // The client should first establish a session via GET to obtain a sessionId.
+  // POST: route a message to an existing session. According to the MCP spec,
+  // requests without a sessionId or with an unknown sessionId should return 400.
   if (req.method === 'POST') {
     if (!sessionId) {
-      console.log('POST received without sessionId – redirecting with 303 to GET /api/sse');
-      res.setHeader('Cache-Control', 'no-store');
-      res.setHeader('Location', '/api/sse');
-      // 303 See Other switches to GET per spec; ideal for POST→GET handoff
-      res.status(303).end();
+      console.log('POST received without sessionId – returning 400');
+      res.status(400).send('Missing sessionId');
       return;
     }
     console.log('Session ID received:', sessionId);
     const existing = transports.get(sessionId);
     if (!existing) {
-      res.status(404).send('Session not found');
+      res.status(400).send('Invalid sessionId');
       return;
     }
     try {
