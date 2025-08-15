@@ -83,10 +83,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error('Failed to create SSE transport');
     }
     
-    // Start the SSE transport before connecting the MCP server
-    console.log('Starting SSE transport...');
-    transport.start();
-    console.log('SSE transport started successfully');
+    // Note: Don't call transport.start() manually - Server.connect() calls it automatically
+    console.log('SSE transport ready for connection');
     
     // Log transport session ID for debugging
     console.log('Transport session ID:', transport.sessionId);
@@ -94,6 +92,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('Connecting MCP server to transport...');
     await mcpServer.connect(transport);
     console.log('MCP server connected successfully');
+    
+    // Log that the transport has been started by the MCP server
+    console.log('SSE transport started by MCP server connection');
     
     // Validate that the connection is working
     console.log('Validating MCP connection...');
