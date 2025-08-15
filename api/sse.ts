@@ -1,5 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { kv as defaultKv, createClient as createKvClient } from '@vercel/kv';
+
+// Support both Vercel KV envs and Upstash Marketplace envs
+const redis = (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+  ? defaultKv
+  : createKvClient({
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    });
 
 // Store active transports by session ID so POST requests can be routed correctly
 const transports = new Map<string, SSEServerTransport>();
@@ -56,9 +67,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('Session ID received:', sessionId);
     const existing = transports.get(sessionId);
     if (!existing) {
-      console.warn('POST received with unknown sessionId – returning 400');
-      res.status(400).send('Invalid sessionId');
-      return;
+      // Relay through KV so any instance can deliver to the GET holder
+      try {
+        // Read raw JSON body
+        const body = await new Promise<string>((resolve, reject) => {
+          const chunks: Uint8Array[] = [];
+          req
+            .on('data', (c: Uint8Array) => chunks.push(c))
+            .on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+            .on('error', reject);
+        });
+
+        const payload = body ? JSON.parse(body) : null;
+        if (!payload) {
+          res.status(400).send('Invalid body');
+          return;
+        }
+
+        const queueKey = `mcp:session:${sessionId}:queue`;
+        await redis.rpush(queueKey, JSON.stringify(payload));
+        // Auto-expire in case the client never reconnects
+        await redis.expire(queueKey, 600);
+        res.status(202).end();
+        return;
+      } catch (err) {
+        console.error('KV relay failed:', err);
+        res.status(500).send('Relay failed');
+        return;
+      }
     }
     try {
       await existing.handlePostMessage(req, res);
@@ -237,6 +273,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('SSE transport is properly configured for MCP communication');
 
     console.log('MCP connection established and ready for indefinite communication');
+
+    // Start KV relay pump to deliver POST messages arriving on other instances
+    if (transport.sessionId) {
+      const queueKey = `mcp:session:${transport.sessionId}:queue`;
+      let closed = false;
+      res.on('close', () => {
+        closed = true;
+      });
+
+      (async () => {
+        while (!closed) {
+          try {
+            // Block up to 25s waiting for a message, then loop to keep the function alive
+            const result: any = await (redis as any).blpop(queueKey, { timeout: 25 });
+            // @vercel/kv returns either null (timeout) or [key, value] | { key, element }
+            if (result) {
+              const value = Array.isArray(result) ? result[1] : (result.element ?? result[queueKey]);
+              if (value) {
+                const msg = JSON.parse(value);
+                try {
+                  // Deliver as if it came via POST
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  await (transport as any).handleMessage(msg);
+                } catch (deliverErr) {
+                  console.error('Error delivering relayed message to transport:', deliverErr);
+                }
+              }
+            }
+          } catch (loopErr) {
+            console.error('KV relay pump error:', loopErr);
+            // Small backoff to avoid tight error loops
+            await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+      })();
+    }
     
     // Keep the request open until the client disconnects. The transport has
     // already been started by the server connection above, so we simply wait
