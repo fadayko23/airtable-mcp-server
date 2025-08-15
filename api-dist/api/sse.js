@@ -1,4 +1,14 @@
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
+import { kv as defaultKv, createClient as createKvClient } from '@vercel/kv';
+// Support both Vercel KV envs and Upstash Marketplace envs
+const redis = (process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN)
+    ? defaultKv
+    : createKvClient({
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
 // Store active transports by session ID so POST requests can be routed correctly
 const transports = new Map();
 // Minimal SSE MCP endpoint for OpenAI Connector
@@ -44,8 +54,33 @@ export default async function handler(req, res) {
         console.log('Session ID received:', sessionId);
         const existing = transports.get(sessionId);
         if (!existing) {
-            res.status(400).send('Invalid sessionId');
-            return;
+            // Relay through KV so any instance can deliver to the GET holder
+            try {
+                // Read raw JSON body
+                const body = await new Promise((resolve, reject) => {
+                    const chunks = [];
+                    req
+                        .on('data', (c) => chunks.push(c))
+                        .on('end', () => resolve(Buffer.concat(chunks).toString('utf8')))
+                        .on('error', reject);
+                });
+                const payload = body ? JSON.parse(body) : null;
+                if (!payload) {
+                    res.status(400).send('Invalid body');
+                    return;
+                }
+                const queueKey = `mcp:session:${sessionId}:queue`;
+                await redis.rpush(queueKey, JSON.stringify(payload));
+                // Auto-expire in case the client never reconnects
+                await redis.expire(queueKey, 600);
+                res.status(202).end();
+                return;
+            }
+            catch (err) {
+                console.error('KV relay failed:', err);
+                res.status(500).send('Relay failed');
+                return;
+            }
         }
         try {
             await existing.handlePostMessage(req, res);
@@ -204,6 +239,44 @@ export default async function handler(req, res) {
             console.log('Transport can handle POST messages');
         console.log('SSE transport is properly configured for MCP communication');
         console.log('MCP connection established and ready for indefinite communication');
+        // Start KV relay pump to deliver POST messages arriving on other instances
+        if (transport.sessionId) {
+            const queueKey = `mcp:session:${transport.sessionId}:queue`;
+            let closed = false;
+            res.on('close', () => {
+                closed = true;
+            });
+            (async () => {
+                while (!closed) {
+                    try {
+                        // REST KV does not support blocking pops. Poll with LPOP and a short sleep.
+                        const value = await redis.lpop(queueKey);
+                        if (value) {
+                            const msg = JSON.parse(value);
+                            try {
+                                // Deliver as if it came via POST
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                await transport.handleMessage(msg);
+                            }
+                            catch (deliverErr) {
+                                console.error('Error delivering relayed message to transport:', deliverErr);
+                            }
+                            // Refresh TTL while active
+                            await redis.expire(queueKey, 600);
+                        }
+                        else {
+                            // No message; brief sleep to avoid tight loop
+                            await new Promise((r) => setTimeout(r, 800));
+                        }
+                    }
+                    catch (loopErr) {
+                        console.error('KV relay pump error:', loopErr);
+                        // Small backoff to avoid tight error loops
+                        await new Promise((r) => setTimeout(r, 500));
+                    }
+                }
+            })();
+        }
         // Keep the request open until the client disconnects. The transport has
         // already been started by the server connection above, so we simply wait
         // indefinitely here.

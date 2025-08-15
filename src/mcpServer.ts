@@ -9,7 +9,7 @@ import {
 	type ReadResourceResult,
 	type ListResourcesResult,
 } from '@modelcontextprotocol/sdk/types.js';
-import {type z} from 'zod';
+import {z} from 'zod';
 import {zodToJsonSchema} from 'zod-to-json-schema';
 import {type Transport} from '@modelcontextprotocol/sdk/shared/transport.js';
 import {
@@ -53,6 +53,19 @@ const formatToolResponse = (data: unknown, isError = false): CallToolResult => {
 		}],
 		isError,
 	};
+};
+
+// Simplified JSON Schemas for OpenAI connector validation
+const SIMPLE_FIELD_JSON_SCHEMA = {
+	type: 'object' as const,
+	properties: {
+		name: {type: 'string' as const},
+		type: {type: 'string' as const},
+		description: {type: 'string' as const},
+		options: {type: 'object' as const},
+	},
+	required: ['name', 'type'] as string[],
+	additionalProperties: false,
 };
 
 export class AirtableMCPServer implements IAirtableMCPServer {
@@ -153,287 +166,72 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 	}
 
 	private async handleListTools(): Promise<ListToolsResult> {
-		console.log('MCP handleListTools called - returning tool definitions');
+		console.log('MCP handleListTools called - returning minimal tool set (search, fetch)');
 		const result = {
 			tools: [
 				{
-					name: 'list_records',
-					description: 'List records from a table',
-					inputSchema: getInputSchema(ListRecordsArgsSchema),
-				},
-				{
-					name: 'search_records',
-					description: 'Search for records containing specific text',
-					inputSchema: getInputSchema(SearchRecordsArgsSchema),
-				},
-				{
 					name: 'search',
-					description: 'Search for content across Airtable records',
-					inputSchema: getInputSchema(SearchRecordsArgsSchema),
-				},
-				{
-					name: 'list_bases',
-					description: 'List all accessible Airtable bases',
+					description: 'Search for content and return a list of results with id, title, text, url',
 					inputSchema: {
 						type: 'object' as const,
-						properties: {},
-						required: [],
+						properties: { query: { type: 'string' as const } },
+						required: ['query'] as string[],
 						additionalProperties: false,
 					},
 				},
 				{
-					name: 'list_tables',
-					description: 'List all tables in a specific base',
-					inputSchema: getInputSchema(ListTablesArgsSchema),
-				},
-				{
-					name: 'describe_table',
-					description: 'Get detailed information about a specific table',
-					inputSchema: getInputSchema(DescribeTableArgsSchema),
-				},
-				{
-					name: 'get_record',
-					description: 'Get a specific record by ID',
-					inputSchema: getInputSchema(GetRecordArgsSchema),
-				},
-				{
-					name: 'create_record',
-					description: 'Create a new record in a table',
-					inputSchema: getInputSchema(CreateRecordArgsSchema),
-				},
-				{
-					name: 'update_records',
-					description: 'Update up to 10 records in a table',
-					inputSchema: getInputSchema(UpdateRecordsArgsSchema),
-				},
-				{
-					name: 'delete_records',
-					description: 'Delete records from a table',
-					inputSchema: getInputSchema(DeleteRecordsArgsSchema),
-				},
-				{
-					name: 'create_table',
-					description: 'Create a new table in a base',
-					inputSchema: getInputSchema(CreateTableArgsSchema),
-				},
-				{
-					name: 'update_table',
-					description: 'Update a table\'s name or description',
-					inputSchema: getInputSchema(UpdateTableArgsSchema),
-				},
-				{
-					name: 'create_field',
-					description: 'Create a new field in a table',
-					inputSchema: getInputSchema(CreateFieldArgsSchema),
-				},
-				{
-					name: 'update_field',
-					description: 'Update a field\'s name or description',
-					inputSchema: getInputSchema(UpdateFieldArgsSchema),
+					name: 'fetch',
+					description: 'Fetch a single result by id and return id, title, text, url, metadata',
+					inputSchema: {
+						type: 'object' as const,
+						properties: { id: { type: 'string' as const } },
+						required: ['id'] as string[],
+						additionalProperties: false,
+					},
 				},
 			],
 		};
 		console.log(`MCP handleListTools returning ${result.tools.length} tools`);
-		return result;
+		return result as unknown as ListToolsResult;
 	}
 
 	private async handleCallTool(request: z.infer<typeof CallToolRequestSchema>): Promise<CallToolResult> {
 		try {
 			switch (request.params.name) {
-				case 'list_records': {
-					const args = ListRecordsArgsSchema.parse(request.params.arguments);
-					const records = await this.airtableService.listRecords(
-						args.baseId,
-						args.tableId,
-						{
-							view: args.view,
-							maxRecords: args.maxRecords,
-							filterByFormula: args.filterByFormula,
-							sort: args.sort,
-						},
-					);
-					return formatToolResponse(records);
-				}
-
-				case 'search_records':
 				case 'search': {
-					const args = SearchRecordsArgsSchema.parse(request.params.arguments);
-					const records = await this.airtableService.searchRecords(
-						args.baseId,
-						args.tableId,
-						args.searchTerm,
-						args.fieldIds,
-						args.maxRecords,
-						args.view,
-					);
-					return formatToolResponse(records);
-				}
-
-				case 'list_bases': {
-					const {bases} = await this.airtableService.listBases();
-					return formatToolResponse(bases.map((base) => ({
-						id: base.id,
-						name: base.name,
-						permissionLevel: base.permissionLevel,
-					})));
-				}
-
-				case 'list_tables': {
-					const args = ListTablesArgsSchema.parse(request.params.arguments);
-					const schema = await this.airtableService.getBaseSchema(args.baseId);
-					return formatToolResponse(schema.tables.map((table) => {
-						switch (args.detailLevel) {
-							case 'tableIdentifiersOnly':
-								return {
-									id: table.id,
-									name: table.name,
-								};
-							case 'identifiersOnly':
-								return {
-									id: table.id,
-									name: table.name,
-									fields: table.fields.map((field) => ({
-										id: field.id,
-										name: field.name,
-									})),
-									views: table.views.map((view) => ({
-										id: view.id,
-										name: view.name,
-									})),
-								};
-							case 'full':
-							// eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check, no-fallthrough
-							default:
-								return {
-									id: table.id,
-									name: table.name,
-									description: table.description,
-									fields: table.fields,
-									views: table.views,
-								};
-						}
+					const Args = z.object({ query: z.string() });
+					const { query } = Args.parse(request.params.arguments);
+					const { bases } = await this.airtableService.listBases();
+					if (!bases.length) return formatToolResponse([]);
+					const baseId = bases[0].id;
+					const baseSchema = await this.airtableService.getBaseSchema(baseId);
+					const table = baseSchema.tables[0];
+					if (!table) return formatToolResponse([]);
+					const records = await this.airtableService.searchRecords(baseId, table.id, query, undefined, 10);
+					const results = records.map((r) => ({
+						id: `${baseId}:${table.id}:${r.id}`,
+						title: `${table.name} record ${r.id}`,
+						text: JSON.stringify(r.fields).slice(0, 200),
+						url: '',
 					}));
+					return formatToolResponse(results);
 				}
 
-				case 'describe_table': {
-					const args = DescribeTableArgsSchema.parse(request.params.arguments);
-					const schema = await this.airtableService.getBaseSchema(args.baseId);
-					const table = schema.tables.find((t) => t.id === args.tableId);
-
-					if (!table) {
-						return formatToolResponse(`Table ${args.tableId} not found in base ${args.baseId}`, true);
-					}
-
-					switch (args.detailLevel) {
-						case 'tableIdentifiersOnly':
-							return formatToolResponse({
-								id: table.id,
-								name: table.name,
-							});
-						case 'identifiersOnly':
-							return formatToolResponse({
-								id: table.id,
-								name: table.name,
-								fields: table.fields.map((field) => ({
-									id: field.id,
-									name: field.name,
-								})),
-								views: table.views.map((view) => ({
-									id: view.id,
-									name: view.name,
-								})),
-							});
-						case 'full':
-						// eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check, no-fallthrough
-						default:
-							return formatToolResponse({
-								id: table.id,
-								name: table.name,
-								description: table.description,
-								fields: table.fields,
-								views: table.views,
-							});
-					}
-				}
-
-				case 'get_record': {
-					const args = GetRecordArgsSchema.parse(request.params.arguments);
-					const record = await this.airtableService.getRecord(args.baseId, args.tableId, args.recordId);
-					return formatToolResponse({
+				case 'fetch': {
+					const Args = z.object({ id: z.string() });
+					const { id } = Args.parse(request.params.arguments);
+					const parts = id.split(':');
+					if (parts.length !== 3) return formatToolResponse('Invalid id format. Expected baseId:tableId:recordId', true);
+					const [baseId, tableId, recordId] = parts;
+					const record = await this.airtableService.getRecord(baseId, tableId, recordId);
+					const payload = {
 						id: record.id,
-						fields: record.fields,
-					});
-				}
-
-				case 'create_record': {
-					const args = CreateRecordArgsSchema.parse(request.params.arguments);
-					const record = await this.airtableService.createRecord(args.baseId, args.tableId, args.fields);
-					return formatToolResponse({
-						id: record.id,
-						fields: record.fields,
-					});
-				}
-
-				case 'update_records': {
-					const args = UpdateRecordsArgsSchema.parse(request.params.arguments);
-					const records = await this.airtableService.updateRecords(args.baseId, args.tableId, args.records);
-					return formatToolResponse(records.map((record) => ({
-						id: record.id,
-						fields: record.fields,
-					})));
-				}
-
-				case 'delete_records': {
-					const args = DeleteRecordsArgsSchema.parse(request.params.arguments);
-					const records = await this.airtableService.deleteRecords(args.baseId, args.tableId, args.recordIds);
-					return formatToolResponse(records.map((record) => ({
-						id: record.id,
-					})));
-				}
-
-				case 'create_table': {
-					const args = CreateTableArgsSchema.parse(request.params.arguments);
-					const table = await this.airtableService.createTable(
-						args.baseId,
-						args.name,
-						args.fields,
-						args.description,
-					);
-					return formatToolResponse(table);
-				}
-
-				case 'update_table': {
-					const args = UpdateTableArgsSchema.parse(request.params.arguments);
-					const table = await this.airtableService.updateTable(
-						args.baseId,
-						args.tableId,
-						{name: args.name, description: args.description},
-					);
-					return formatToolResponse(table);
-				}
-
-				case 'create_field': {
-					const args = CreateFieldArgsSchema.parse(request.params.arguments);
-					const field = await this.airtableService.createField(
-						args.baseId,
-						args.tableId,
-						args.nested.field,
-					);
-					return formatToolResponse(field);
-				}
-
-				case 'update_field': {
-					const args = UpdateFieldArgsSchema.parse(request.params.arguments);
-					const field = await this.airtableService.updateField(
-						args.baseId,
-						args.tableId,
-						args.fieldId,
-						{
-							name: args.name,
-							description: args.description,
-						},
-					);
-					return formatToolResponse(field);
+						title: `${tableId} ${record.id}`,
+						text: JSON.stringify(record.fields),
+						url: '',
+						metadata: { baseId, tableId },
+					};
+					return formatToolResponse(payload);
 				}
 
 				default: {
