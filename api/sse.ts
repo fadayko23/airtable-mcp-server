@@ -128,17 +128,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
 
-    console.log('Starting SSE transport...');
-    try {
-      await transport.start();
-      console.log('SSE transport started - ready for MCP connection');
-    } catch (error) {
-      console.error('Failed to start SSE transport:', error);
-      res.status(500).send('Failed to start SSE transport');
-      return;
-    }
-    
     console.log('Connecting MCP server to transport...');
+    // Note: mcpServer.connect() automatically calls transport.start() 
     try {
       await mcpServer.connect(transport);
       console.log('MCP server connected to transport successfully');
