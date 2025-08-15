@@ -42,9 +42,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // The client should first establish a session via GET to obtain a sessionId.
   if (req.method === 'POST') {
     if (!sessionId) {
-      console.log('POST received without sessionId – responding 204 (pre-session hint)');
-      res.setHeader('MCP-PreSession', 'true');
-      res.status(204).end();
+      console.log('POST received without sessionId – redirecting with 303 to GET /api/sse');
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Location', '/api/sse');
+      // 303 See Other switches to GET per spec; ideal for POST→GET handoff
+      res.status(303).end();
       return;
     }
     console.log('Session ID received:', sessionId);
