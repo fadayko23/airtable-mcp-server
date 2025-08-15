@@ -49,7 +49,6 @@ const formatToolResponse = (data: unknown, isError = false): CallToolResult => {
 	return {
 		content: [{
 			type: 'text',
-			mimeType: 'application/json',
 			text: JSON.stringify(data),
 		}],
 		isError,

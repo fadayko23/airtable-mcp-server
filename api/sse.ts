@@ -12,14 +12,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // CORS and caching headers (common)
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, HEAD, OPTIONS');
+  // Echo requested headers for preflight; otherwise allow a safe default set used by the MCP connector
+  const requestedHeaders = req.headers['access-control-request-headers'];
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    requestedHeaders || 'Content-Type, Accept, X-Requested-With, OpenAI-Beta, MCP-Version, MCP-Protocol-Version'
+  );
+  // Expose headers if the client needs to read them
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Type, Cache-Control, Connection, Keep-Alive');
   // Per OpenAI connector/MCP SSE expectations, disable caching completely
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Keep-Alive', 'timeout=55');
 
   if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Max-Age', '600');
     res.status(204).end();
     return;
   }
@@ -53,6 +61,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     try {
       await existing.handlePostMessage(req, res);
+      // Ensure a compliant response code if the transport didn't already send one
+      if (!res.headersSent) {
+        res.status(202).end();
+      }
     } catch (err) {
       console.error('Error handling POST message:', err);
       if (!res.headersSent) res.status(500).send('Error handling request');
@@ -225,9 +237,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('MCP connection established and ready for indefinite communication');
     
-    // Send an initial SSE comment to validate the stream is working
-    res.write(': MCP SSE stream initialized\n\n');
-
     // Keep the request open until the client disconnects. The transport has
     // already been started by the server connection above, so we simply wait
     // indefinitely here.
