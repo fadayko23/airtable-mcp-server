@@ -70,8 +70,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Set SSE-specific headers for the streaming response (GET only)
   // Let the transport manage SSE details, but disabling buffering is safe
   res.setHeader('X-Accel-Buffering', 'no');
-  // Some validators require this header to be present on the initial response
-  res.setHeader('Content-Type', 'text/event-stream');
+  // Explicit SSE headers per spec
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  // Flush headers early if supported (helps some validators/proxies)
+  if (typeof (res as unknown as {flushHeaders?: () => void}).flushHeaders === 'function') {
+    (res as unknown as {flushHeaders?: () => void}).flushHeaders?.();
+  }
 
   try {
     console.log('Checking for API key...');
