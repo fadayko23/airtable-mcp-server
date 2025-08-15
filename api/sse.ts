@@ -31,6 +31,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Handle GET to root path for basic server info (for validation)
+  if (req.method === 'GET' && !req.url?.includes('sessionId')) {
+    // Check if this might be a validation request
+    const userAgent = req.headers['user-agent'] || '';
+    if (userAgent.includes('openai') || req.headers.accept?.includes('application/json')) {
+      // Return basic MCP server info for validation
+      res.status(200).json({
+        name: 'airtable-mcp-server',
+        version: '1.6.1',
+        protocol: 'mcp',
+        protocolVersion: '2024-11-05',
+        transport: 'sse',
+        capabilities: {
+          resources: { subscribe: false, read: true, list: true },
+          tools: { subscribe: false, call: true, list: true }
+        }
+      });
+      return;
+    }
+  }
+
   const sessionId = Array.isArray(req.query.sessionId)
     ? req.query.sessionId[0]
     : req.query.sessionId;

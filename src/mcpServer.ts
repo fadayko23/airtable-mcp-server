@@ -168,6 +168,11 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 					inputSchema: getInputSchema(SearchRecordsArgsSchema),
 				},
 				{
+					name: 'search',
+					description: 'Search for content across Airtable records',
+					inputSchema: getInputSchema(SearchRecordsArgsSchema),
+				},
+				{
 					name: 'list_bases',
 					description: 'List all accessible Airtable bases',
 					inputSchema: {
@@ -251,7 +256,8 @@ export class AirtableMCPServer implements IAirtableMCPServer {
 					return formatToolResponse(records);
 				}
 
-				case 'search_records': {
+				case 'search_records':
+				case 'search': {
 					const args = SearchRecordsArgsSchema.parse(request.params.arguments);
 					const records = await this.airtableService.searchRecords(
 						args.baseId,
