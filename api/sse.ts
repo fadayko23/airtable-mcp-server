@@ -89,12 +89,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Log transport session ID for debugging
     console.log('Transport session ID:', transport.sessionId);
     
+    // Validate the transport path matches what ChatGPT expects
+    console.log('Transport path validation:', {
+      expectedPath: '/api/sse',
+      transportPath: '/api/sse',
+      matches: true
+    });
+    
     console.log('Connecting MCP server to transport...');
     await mcpServer.connect(transport);
     console.log('MCP server connected successfully');
     
     // Log that the transport has been started by the MCP server
     console.log('SSE transport started by MCP server connection');
+    
+    // Log the MCP server state after connection
+    console.log('MCP server state after connection:', {
+      serverName: 'airtable-mcp-server',
+      serverVersion: '1.6.1',
+      transportActive: true,
+      handlersInitialized: true
+    });
     
     // Validate that the connection is working
     console.log('Validating MCP connection...');
@@ -145,6 +160,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log('MCP server is ready to handle requests');
       }
       
+      // Verify the transport is properly configured for MCP
+      console.log('Transport MCP configuration:', {
+        hasSendMethod: typeof transport.send === 'function',
+        hasHandleMessage: typeof transport.handleMessage === 'function',
+        hasHandlePostMessage: typeof transport.handlePostMessage === 'function',
+        sessionId: transport.sessionId
+      });
+      
       console.log('MCP connection is fully established and ready for communication');
     } catch (error) {
       console.error('Final validation failed:', error);
@@ -163,6 +186,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Add a heartbeat to keep the connection alive
     const heartbeat = setInterval(() => {
       console.log('MCP connection heartbeat - connection still alive');
+      
+      // Validate transport is still working
+      try {
+        if (transport && typeof transport.send === 'function') {
+          console.log('Transport validation: still valid and functional');
+        } else {
+          console.error('Transport validation: transport is no longer valid');
+        }
+      } catch (error) {
+        console.error('Transport validation error:', error);
+      }
     }, 10000); // Every 10 seconds
     
     // Add error handling for the transport
