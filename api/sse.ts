@@ -56,15 +56,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ? req.query.sessionId[0]
     : req.query.sessionId;
 
-  // POST: route a message to an existing session. Some clients (e.g. probes)
-  // may POST before establishing a GET SSE session. To nudge the client to
-  // perform the correct GET handshake, respond 404 when no sessionId is
-  // provided – this mirrors prior working behavior that led clients to issue
-  // the GET that opens the SSE stream.
+  // POST: route a message to an existing session. According to MCP specification,
+  // requests without a valid sessionId should return 400 Bad Request (not 404).
+  // The client should first establish a session via GET to obtain a sessionId.
   if (req.method === 'POST') {
     if (!sessionId) {
-      console.log('POST received without sessionId – responding 404 to prompt SSE GET handshake');
-      res.status(404).send('Session not found');
+      console.log('POST received without sessionId – responding 400 Bad Request per MCP spec');
+      res.status(400).json({
+        error: 'Bad Request',
+        message: 'Missing sessionId. Please establish an SSE session first via GET request.'
+      });
       return;
     }
     console.log('Session ID received:', sessionId);
@@ -253,7 +254,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Keep the request open until the client disconnects. The transport has
     // already been started by the server connection above, so we simply wait
     // indefinitely here.
-    await new Promise<void>(() => {});
+    await new Promise<void>((resolve) => {
+      // The promise resolves when the response closes
+      res.on('close', () => {
+        console.log('SSE connection closed by client');
+        resolve();
+      });
+      res.on('error', (err) => {
+        console.error('SSE connection error:', err);
+        resolve();
+      });
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('SSE handler error:', err);
