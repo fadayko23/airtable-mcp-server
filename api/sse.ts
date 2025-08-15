@@ -17,6 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Per OpenAI connector/MCP SSE expectations, disable caching completely
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Keep-Alive', 'timeout=55');
 
   if (req.method === 'OPTIONS') {
     res.status(204).end();
