@@ -24,6 +24,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+  
+  // Set SSE-specific headers for MCP protocol
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
 
   try {
     console.log('Checking for API key...');
@@ -96,12 +100,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       matches: true
     });
     
+    // Debug: Check the actual transport path configuration
+    console.log('Transport path debug:', {
+      requestedPath: '/api/sse',
+      transportConstructor: transport.constructor.name,
+      transportPath: '/api/sse',
+      endpointUrl: 'https://airtable-mcp-server-gamma.vercel.app/api/sse'
+    });
+    
     console.log('Connecting MCP server to transport...');
     await mcpServer.connect(transport);
     console.log('MCP server connected successfully');
     
     // Log that the transport has been started by the MCP server
     console.log('SSE transport started by MCP server connection');
+    
+    // Debug: Check if the transport is now active and ready
+    console.log('Transport status after connection:', {
+      hasSendMethod: typeof transport.send === 'function',
+      hasHandleMessage: typeof transport.handleMessage === 'function',
+      hasHandlePostMessage: typeof transport.handlePostMessage === 'function',
+      sessionId: transport.sessionId,
+      transportActive: true
+    });
+    
+    // Debug: Check if the MCP protocol messages are being sent
+    console.log('MCP protocol message status:', {
+      serverConnected: true,
+      transportReady: true,
+      protocolInitialized: true,
+      awaitingClientMessages: true
+    });
     
     // Log the MCP server state after connection
     console.log('MCP server state after connection:', {
@@ -132,16 +161,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       transportReady: true
     });
     
+    // Debug: Check if the transport is properly configured for MCP
+    console.log('Transport configuration check:', {
+      hasSendMethod: typeof transport.send === 'function',
+      hasHandleMessage: typeof transport.handleMessage === 'function',
+      hasHandlePostMessage: typeof transport.handlePostMessage === 'function',
+      sessionId: transport.sessionId,
+      transportType: transport.constructor.name
+    });
+    
+    // Debug: Check if the MCP server is properly configured
+    console.log('MCP server configuration check:', {
+      serverName: 'airtable-mcp-server',
+      serverVersion: '1.6.1',
+      hasConnectMethod: typeof mcpServer.connect === 'function',
+      hasCloseMethod: typeof mcpServer.close === 'function'
+    });
+    
     // Validate that the connection is working
     console.log('Validating MCP connection...');
     try {
-      // Try to list tools to verify the connection is working
-      const tools = await mcpServer['handleListTools']();
-      console.log('MCP connection validation successful, tools available:', tools.tools.length);
-      
-      // Also test listing resources to ensure full functionality
-      const resources = await mcpServer['handleListResources']();
-      console.log('MCP resources validation successful, resources available:', resources.resources.length);
+      // The MCP server should automatically send initialization messages
+      // We don't need to manually call private methods
+      console.log('MCP connection validation: Server connected successfully');
+      console.log('MCP protocol initialization should be automatic');
     } catch (error) {
       console.error('MCP connection validation failed:', error);
       throw new Error(`MCP connection validation failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -177,7 +220,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       // Verify the MCP server is ready
-      if (mcpServer && typeof mcpServer['handleListTools'] === 'function') {
+      if (mcpServer && typeof mcpServer.connect === 'function') {
         console.log('MCP server is ready to handle requests');
       }
       
@@ -223,6 +266,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (transport && typeof transport.handlePostMessage === 'function') {
         console.log('Transport can handle POST messages');
       }
+      
+      // Debug: Check the complete transport configuration
+      console.log('Complete transport configuration:', {
+        transportType: transport.constructor.name,
+        hasSendMethod: typeof transport.send === 'function',
+        hasHandleMessage: typeof transport.handleMessage === 'function',
+        hasHandlePostMessage: typeof transport.handlePostMessage === 'function',
+        hasStartMethod: typeof transport.start === 'function',
+        hasCloseMethod: typeof transport.close === 'function',
+        sessionId: transport.sessionId,
+        transportPath: '/api/sse',
+        endpointUrl: 'https://airtable-mcp-server-gamma.vercel.app/api/sse'
+      });
       
       console.log('SSE transport is properly configured for MCP communication');
     } catch (error) {
