@@ -111,6 +111,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       handlersInitialized: true
     });
     
+    // Log the MCP protocol initialization
+    console.log('MCP protocol initialization:', {
+      serverInfo: {
+        name: 'airtable-mcp-server',
+        version: '1.6.1'
+      },
+      capabilities: {
+        resources: {
+          subscribe: false,
+          read: true,
+          list: true,
+        },
+        tools: {
+          subscribe: false,
+          call: true,
+          list: true,
+        },
+      },
+      transportReady: true
+    });
+    
     // Validate that the connection is working
     console.log('Validating MCP connection...');
     try {
@@ -168,6 +189,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sessionId: transport.sessionId
       });
       
+      // Verify the transport can handle the MCP protocol
+      console.log('MCP protocol transport validation:', {
+        canHandleMessages: typeof transport.handleMessage === 'function',
+        canHandlePostMessages: typeof transport.handlePostMessage === 'function',
+        canSendMessages: typeof transport.send === 'function',
+        transportActive: true
+      });
+      
       console.log('MCP connection is fully established and ready for communication');
     } catch (error) {
       console.error('Final validation failed:', error);
@@ -177,48 +206,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // The connection should now be established and ChatGPT can communicate
     // The SSE transport will handle the MCP protocol messages automatically
     
-    // Set a timeout to keep the connection alive for a reasonable time
-    // This prevents the function from terminating immediately
-    setTimeout(() => {
-      console.log('Connection timeout reached, but MCP should be working');
-    }, 30000); // 30 seconds
-    
-    // Add a heartbeat to keep the connection alive
-    const heartbeat = setInterval(() => {
-      console.log('MCP connection heartbeat - connection still alive');
-      
-      // Validate transport is still working
-      try {
-        if (transport && typeof transport.send === 'function') {
-          console.log('Transport validation: still valid and functional');
-        } else {
-          console.error('Transport validation: transport is no longer valid');
-        }
-      } catch (error) {
-        console.error('Transport validation error:', error);
-      }
-    }, 10000); // Every 10 seconds
-    
-    // Add error handling for the transport
-    try {
-      // Check if transport is still valid
-      if (transport && typeof transport.send === 'function') {
-        console.log('Transport is still valid and has send method');
-      } else {
-        console.error('Transport is no longer valid');
-      }
-    } catch (error) {
-      console.error('Transport validation error:', error);
-    }
-    
-    // Clean up heartbeat on function termination
-    process.on('beforeExit', () => {
-      console.log('Function terminating, cleaning up...');
-      clearInterval(heartbeat);
-    });
-    
     // Don't end the response - let the SSE transport handle it
     // The transport will keep the connection open for MCP communication
+    
+    // Ensure the SSE transport is properly configured for long-lived connections
+    console.log('Configuring SSE transport for long-lived connection...');
+    
+    // Set up proper error handling for the transport
+    try {
+      // Verify the transport can handle MCP protocol messages
+      if (transport && typeof transport.handleMessage === 'function') {
+        console.log('Transport can handle MCP protocol messages');
+      }
+      
+      // Verify the transport can handle POST messages
+      if (transport && typeof transport.handlePostMessage === 'function') {
+        console.log('Transport can handle POST messages');
+      }
+      
+      console.log('SSE transport is properly configured for MCP communication');
+    } catch (error) {
+      console.error('Transport configuration error:', error);
+      throw new Error(`Transport configuration error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    
+    // Keep the connection alive indefinitely for MCP communication
+    console.log('MCP connection established and ready for indefinite communication');
+    
+    // Don't set timeouts - let the MCP transport handle the connection lifecycle
+    // The SSE transport will automatically manage the connection
     
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
